@@ -59,7 +59,7 @@ def perform_analysis(df):
         st.error(f"Missing expected column in the data: {e}")
         return pd.DataFrame(), pd.DataFrame()
 
-st.title("File Processor")
+st.title("Muni Performance")
 
 # Get the latest file from the directory
 latest_file = get_latest_file(directory_path)

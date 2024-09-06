@@ -1,16 +1,31 @@
 import streamlit as st
 import pandas as pd
-import zipfile
 import os
-from io import BytesIO
+import zipfile
+from datetime import datetime
 
-# Define the path to the directory
+# Define the path to the network directory
 directory_path = r'\\aberdeen.aberdeen-asset.com\groupdfs\Philadelphia Group\Fixed Income\Municipals\JL\perf'
 
-def load_data_from_zip(zip_path):
+def get_latest_file(directory):
+    files = os.listdir(directory)
+    # Filter for .xlsx and .zip files
+    files = [f for f in files if f.endswith(('.xlsx', '.zip'))]
+    
+    if not files:
+        st.error("No .xlsx or .zip files found in the directory.")
+        return None
+    
+    # Get the full file paths and sort them by modification time
+    files = [os.path.join(directory, f) for f in files]
+    latest_file = max(files, key=os.path.getmtime)
+    
+    return latest_file
+
+def load_data_from_zip(zip_file):
     data_frames = {}
     try:
-        with zipfile.ZipFile(zip_path, 'r') as zip_ref:
+        with zipfile.ZipFile(zip_file, 'r') as zip_ref:
             for file in zip_ref.namelist():
                 if file.endswith(".xlsx"):
                     with zip_ref.open(file) as extracted_xlsx:
@@ -20,9 +35,9 @@ def load_data_from_zip(zip_path):
         st.error("The ZIP file is corrupted or invalid.")
     return data_frames
 
-def load_data_from_xlsx(xlsx_path):
+def load_data_from_xlsx(xlsx_file):
     try:
-        df = pd.read_excel(xlsx_path)
+        df = pd.read_excel(xlsx_file)
         return df
     except Exception as e:
         st.error(f"Error reading the Excel file: {e}")
@@ -34,20 +49,16 @@ def perform_analysis(df):
     top_negatives = df.nsmallest(10, 'Performance')
     return top_positives, top_negatives
 
-st.title("Process Files from Directory")
+st.title("Automatically Process Latest File")
 
-# List files in the directory
-files = os.listdir(directory_path)
+# Get the latest file from the directory
+latest_file = get_latest_file(directory_path)
 
-# Dropdown menu to select a file
-selected_file = st.selectbox("Select a file", files)
-
-if selected_file:
-    file_path = os.path.join(directory_path, selected_file)
+if latest_file:
+    st.write(f"Processing file: {latest_file}")
     
-    if selected_file.endswith(".zip"):
-        st.write("Processing ZIP file...")
-        data_frames = load_data_from_zip(file_path)
+    if latest_file.endswith(".zip"):
+        data_frames = load_data_from_zip(latest_file)
         if data_frames:
             for file_name, df in data_frames.items():
                 st.write(f"Data from {file_name}:")
@@ -61,9 +72,8 @@ if selected_file:
         else:
             st.warning("No Excel files found in the ZIP.")
     
-    elif selected_file.endswith(".xlsx"):
-        st.write("Processing Excel file...")
-        df = load_data_from_xlsx(file_path)
+    elif latest_file.endswith(".xlsx"):
+        df = load_data_from_xlsx(latest_file)
         if df is not None:
             st.write("Here's a preview of your Excel file:")
             st.write(df)
@@ -75,4 +85,6 @@ if selected_file:
             st.write(top_negatives)
     
     else:
-        st.error("Unsupported file type. Please select a .xlsx or .zip file.")
+        st.error("Unsupported file type.")
+else:
+    st.error("No files found in the directory.")

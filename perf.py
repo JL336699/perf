@@ -1,44 +1,78 @@
-# -*- coding: utf-8 -*-
-"""
-Created on Fri Sep  6 12:34:11 2024
-
-@author: Joseph.Lapsley
-"""
-
 import streamlit as st
 import pandas as pd
 import zipfile
 import os
 from io import BytesIO
 
-st.title("Upload ZIP or Excel File")
+# Define the path to the directory
+directory_path = r'\\aberdeen.aberdeen-asset.com\groupdfs\Philadelphia Group\Fixed Income\Municipals\JL\perf'
 
-uploaded_file = st.file_uploader("Choose an Excel or ZIP file", type=["xlsx", "zip"])
+def load_data_from_zip(zip_path):
+    data_frames = {}
+    try:
+        with zipfile.ZipFile(zip_path, 'r') as zip_ref:
+            for file in zip_ref.namelist():
+                if file.endswith(".xlsx"):
+                    with zip_ref.open(file) as extracted_xlsx:
+                        df = pd.read_excel(extracted_xlsx)
+                        data_frames[file] = df
+    except zipfile.BadZipFile:
+        st.error("The ZIP file is corrupted or invalid.")
+    return data_frames
 
-if uploaded_file is not None:
-    file_name = uploaded_file.name
+def load_data_from_xlsx(xlsx_path):
+    try:
+        df = pd.read_excel(xlsx_path)
+        return df
+    except Exception as e:
+        st.error(f"Error reading the Excel file: {e}")
+
+def perform_analysis(df):
+    # Example of analysis: Find top 10 outliers for positive and negative performance
+    df['Performance'] = df['Base Price Percent Change']  # Assuming this is the performance metric
+    top_positives = df.nlargest(10, 'Performance')
+    top_negatives = df.nsmallest(10, 'Performance')
+    return top_positives, top_negatives
+
+st.title("Process Files from Directory")
+
+# List files in the directory
+files = os.listdir(directory_path)
+
+# Dropdown menu to select a file
+selected_file = st.selectbox("Select a file", files)
+
+if selected_file:
+    file_path = os.path.join(directory_path, selected_file)
     
-    # Check if it's a ZIP file
-    if file_name.endswith(".zip"):
-        with zipfile.ZipFile(BytesIO(uploaded_file.read()), 'r') as zip_ref:
-            # Extract all files from the zip archive
-            zip_ref.extractall("extracted_data")
-            st.success(f"Extracted files: {zip_ref.namelist()}")
-        
-        # Check if there's an xlsx file in the zip and process it
-        for file in zip_ref.namelist():
-            if file.endswith(".xlsx"):
-                extracted_file_path = os.path.join("extracted_data", file)
-                df = pd.read_excel(extracted_file_path)
+    if selected_file.endswith(".zip"):
+        st.write("Processing ZIP file...")
+        data_frames = load_data_from_zip(file_path)
+        if data_frames:
+            for file_name, df in data_frames.items():
+                st.write(f"Data from {file_name}:")
                 st.write(df)
-            else:
-                st.warning(f"No Excel files found in {file_name}")
+                
+                top_positives, top_negatives = perform_analysis(df)
+                st.write("Top 10 Positive Performance:")
+                st.write(top_positives)
+                st.write("Top 10 Negative Performance:")
+                st.write(top_negatives)
+        else:
+            st.warning("No Excel files found in the ZIP.")
     
-    # Check if it's an Excel file
-    elif file_name.endswith(".xlsx"):
-        df = pd.read_excel(uploaded_file)
-        st.write("Here's a preview of your uploaded Excel file:")
-        st.write(df)
+    elif selected_file.endswith(".xlsx"):
+        st.write("Processing Excel file...")
+        df = load_data_from_xlsx(file_path)
+        if df is not None:
+            st.write("Here's a preview of your Excel file:")
+            st.write(df)
+            
+            top_positives, top_negatives = perform_analysis(df)
+            st.write("Top 10 Positive Performance:")
+            st.write(top_positives)
+            st.write("Top 10 Negative Performance:")
+            st.write(top_negatives)
     
     else:
-        st.error("Unsupported file type. Please upload a .xlsx or .zip file.")
+        st.error("Unsupported file type. Please select a .xlsx or .zip file.")

@@ -1,100 +1,87 @@
-import streamlit as st
+# -*- coding: utf-8 -*-
+"""
+Created on Fri Sep  6 14:55:52 2024
+
+@author: Joseph.Lapsley
+"""
+
 import pandas as pd
 import os
-import zipfile
 
-# Define the path to the directory
-directory_path = r'G:\Fixed Income\Municipals\JL\perf'
+# Define the directory containing the files
+directory_path = 'G:/Fixed Income/Municipals/JL/perf'
 
-def get_latest_file(directory):
-    try:
-        files = os.listdir(directory)
-        # Filter for .xlsx and .zip files
-        files = [f for f in files if f.endswith(('.xlsx', '.zip'))]
-        
-        if not files:
-            st.warning("No .xlsx or .zip files found in the directory.")
-            return None
-        
-        # Get the full file paths and sort them by modification time
-        files = [os.path.join(directory, f) for f in files]
-        latest_file = max(files, key=os.path.getmtime)
-        
-        return latest_file
-    
-    except Exception as e:
-        st.error(f"Error accessing the directory: {e}")
-        return None
+# List all files in the directory
+files = os.listdir(directory_path)
+print(f"Files in directory: {files}")
 
-def load_data_from_zip(zip_file):
-    data_frames = {}
-    try:
-        with zipfile.ZipFile(zip_file, 'r') as zip_ref:
-            for file in zip_ref.namelist():
-                if file.endswith(".xlsx"):
-                    with zip_ref.open(file) as extracted_xlsx:
-                        df = pd.read_excel(extracted_xlsx)
-                        data_frames[file] = df
-    except zipfile.BadZipFile:
-        st.error("The ZIP file is corrupted or invalid.")
-    except Exception as e:
-        st.error(f"Error processing the ZIP file: {e}")
-    return data_frames
+# Filter for Excel files
+xlsx_files = [f for f in files if f.lower().endswith('.xlsx')]
+print(f".xlsx files found: {xlsx_files}")
 
-def load_data_from_xlsx(xlsx_file):
-    try:
-        df = pd.read_excel(xlsx_file)
-        return df
-    except Exception as e:
-        st.error(f"Error reading the Excel file: {e}")
+# Check if there are any .xlsx files
+if not xlsx_files:
+    raise FileNotFoundError("No .xlsx files found in the directory.")
 
-def perform_analysis(df):
-    try:
-        # Example of analysis: Find top 10 outliers for positive and negative performance
-        df['Performance'] = df['Base Price Percent Change']  # Adjust column name if necessary
-        top_positives = df.nlargest(10, 'Performance')
-        top_negatives = df.nsmallest(10, 'Performance')
-        return top_positives, top_negatives
-    except KeyError as e:
-        st.error(f"Missing expected column in the data: {e}")
-        return pd.DataFrame(), pd.DataFrame()
+# Find the latest file based on creation/modification time
+latest_file = max(xlsx_files, key=lambda f: os.path.getmtime(os.path.join(directory_path, f)))
+latest_file_path = os.path.join(directory_path, latest_file)
 
-st.title("Muni Performance")
+print(f"Processing latest file: {latest_file_path}")
 
-# Get the latest file from the directory
-latest_file = get_latest_file(directory_path)
+# Load the data from the latest Excel file
+try:
+    data = pd.read_excel(latest_file_path)
+except Exception as e:
+    print(f"Error loading file: {e}")
+    exit()
 
-if latest_file:
-    st.write(f"Processing file: {latest_file}")
-    
-    if latest_file.endswith(".zip"):
-        data_frames = load_data_from_zip(latest_file)
-        if data_frames:
-            for file_name, df in data_frames.items():
-                st.write(f"Data from {file_name}:")
-                st.write(df)
-                
-                top_positives, top_negatives = perform_analysis(df)
-                st.write("Top 10 Positive Performance:")
-                st.write(top_positives)
-                st.write("Top 10 Negative Performance:")
-                st.write(top_negatives)
-        else:
-            st.warning("No Excel files found in the ZIP.")
-    
-    elif latest_file.endswith(".xlsx"):
-        df = load_data_from_xlsx(latest_file)
-        if df is not None:
-            st.write("Here's a preview of your Excel file:")
-            st.write(df)
-            
-            top_positives, top_negatives = perform_analysis(df)
-            st.write("Top 10 Positive Performance:")
-            st.write(top_positives)
-            st.write("Top 10 Negative Performance:")
-            st.write(top_negatives)
-    
-    else:
-        st.error("Unsupported file type.")
-else:
-    st.error("No files found in the directory.")
+# Display the first few rows to understand the structure of the data
+print("Sample data:")
+print(data.head())
+
+# Display the columns to verify data loading
+print("\nColumns in the data:", data.columns.tolist())
+
+# Ensure the necessary columns are present
+required_columns = [
+    'Price Date', 'Fund', 'CUSIP Number', 'Security Description',
+    'Base Price Percent Change', 'Base Market Value Change'
+]
+
+# Check if the required columns are present
+missing_columns = [col for col in required_columns if col not in data.columns]
+if missing_columns:
+    raise ValueError(f"Missing columns in the data: {', '.join(missing_columns)}")
+
+# Convert columns to numeric if necessary
+data['Base Price Percent Change'] = pd.to_numeric(data['Base Price Percent Change'], errors='coerce')
+data['Base Market Value Change'] = pd.to_numeric(data['Base Market Value Change'], errors='coerce')
+
+# Drop rows with NaN values in the relevant columns
+data.dropna(subset=['Base Price Percent Change', 'Base Market Value Change'], inplace=True)
+
+# Display some statistics for debugging
+print("\nData statistics:")
+print(data.describe())
+
+# Find the top 10 biggest positive and negative price changes
+top_10_positive_changes = data.sort_values(by='Base Price Percent Change', ascending=False).head(10)
+top_10_negative_changes = data.sort_values(by='Base Price Percent Change', ascending=True).head(10)
+
+# Find the top 10 biggest positive and negative market value changes
+top_10_positive_market_value_changes = data.sort_values(by='Base Market Value Change', ascending=False).head(10)
+top_10_negative_market_value_changes = data.sort_values(by='Base Market Value Change', ascending=True).head(10)
+
+# Print the results
+print("\nTop 10 Biggest Positive Price Changes:")
+print(top_10_positive_changes[['Fund', 'CUSIP Number', 'Security Description', 'Base Price Percent Change']].to_string(index=False))
+
+print("\nTop 10 Biggest Negative Price Changes:")
+print(top_10_negative_changes[['Fund', 'CUSIP Number', 'Security Description', 'Base Price Percent Change']].to_string(index=False))
+
+print("\nTop 10 Biggest Positive Market Value Changes:")
+print(top_10_positive_market_value_changes[['Fund', 'CUSIP Number', 'Security Description', 'Base Market Value Change']].to_string(index=False))
+
+print("\nTop 10 Biggest Negative Market Value Changes:")
+print(top_10_negative_market_value_changes[['Fund', 'CUSIP Number', 'Security Description', 'Base Market Value Change']].to_string(index=False))

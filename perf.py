@@ -9,51 +9,36 @@ import streamlit as st
 import pandas as pd
 import zipfile
 import os
+from io import BytesIO
 
-# Helper function to process .xlsx files
-def process_xlsx(file):
-    df = pd.read_excel(file)
-    return df
+st.title("Upload ZIP or Excel File")
 
-# Helper function to process .zip files
-def process_zip(file):
-    with zipfile.ZipFile(file, 'r') as zip_ref:
-        # Extract all files to a temporary directory
-        zip_ref.extractall("temp_data")
-        for extracted_file in zip_ref.namelist():
-            if extracted_file.endswith('.xlsx'):
-                # Process the extracted Excel file
-                return pd.read_excel(os.path.join("temp_data", extracted_file))
-    return None
+uploaded_file = st.file_uploader("Choose an Excel or ZIP file", type=["xlsx", "zip"])
 
-# Streamlit UI
-st.title("Upload a Zip or Excel File")
-
-uploaded_file = st.file_uploader("Upload a .zip or .xlsx file", type=["zip", "xlsx"])
-
-if uploaded_file:
-    file_details = {"filename": uploaded_file.name, "filetype": uploaded_file.type}
+if uploaded_file is not None:
+    file_name = uploaded_file.name
     
-    if uploaded_file.name.endswith('.xlsx'):
-        st.write("Processing Excel file...")
-        try:
-            df = process_xlsx(uploaded_file)
-            st.write("File processed successfully!")
-            st.dataframe(df.head())  # Display the first few rows of the DataFrame
-        except Exception as e:
-            st.error(f"Error processing Excel file: {e}")
-    
-    elif uploaded_file.name.endswith('.zip'):
-        st.write("Processing Zip file...")
-        try:
-            df = process_zip(uploaded_file)
-            if df is not None:
-                st.write("File processed successfully!")
-                st.dataframe(df.head())  # Display the first few rows of the DataFrame
+    # Check if it's a ZIP file
+    if file_name.endswith(".zip"):
+        with zipfile.ZipFile(BytesIO(uploaded_file.read()), 'r') as zip_ref:
+            # Extract all files from the zip archive
+            zip_ref.extractall("extracted_data")
+            st.success(f"Extracted files: {zip_ref.namelist()}")
+        
+        # Check if there's an xlsx file in the zip and process it
+        for file in zip_ref.namelist():
+            if file.endswith(".xlsx"):
+                extracted_file_path = os.path.join("extracted_data", file)
+                df = pd.read_excel(extracted_file_path)
+                st.write(df)
             else:
-                st.error("No valid Excel file found in the ZIP archive.")
-        except Exception as e:
-            st.error(f"Error processing Zip file: {e}")
+                st.warning(f"No Excel files found in {file_name}")
+    
+    # Check if it's an Excel file
+    elif file_name.endswith(".xlsx"):
+        df = pd.read_excel(uploaded_file)
+        st.write("Here's a preview of your uploaded Excel file:")
+        st.write(df)
     
     else:
-        st.error("Unsupported file type. Please upload a .zip or .xlsx file.")
+        st.error("Unsupported file type. Please upload a .xlsx or .zip file.")

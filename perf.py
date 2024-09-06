@@ -10,41 +10,50 @@ import pandas as pd
 import zipfile
 import os
 
-# Title and description for the Streamlit app
-st.title("Municipal Bond Performance Analysis")
-st.write("Upload a ZIP file containing your data to analyze the top 10 outliers for both positive and negative performance.")
+# Helper function to process .xlsx files
+def process_xlsx(file):
+    df = pd.read_excel(file)
+    return df
 
-# Function to process the uploaded ZIP file
-def process_uploaded_zip(uploaded_file):
-    # Unzipping the file
-    with zipfile.ZipFile(uploaded_file, 'r') as zip_ref:
-        zip_ref.extractall("extracted_data")
+# Helper function to process .zip files
+def process_zip(file):
+    with zipfile.ZipFile(file, 'r') as zip_ref:
+        # Extract all files to a temporary directory
+        zip_ref.extractall("temp_data")
+        for extracted_file in zip_ref.namelist():
+            if extracted_file.endswith('.xlsx'):
+                # Process the extracted Excel file
+                return pd.read_excel(os.path.join("temp_data", extracted_file))
+    return None
 
-    # Assuming there's a specific CSV or Excel file in the ZIP after extraction
-    for file in os.listdir("extracted_data"):
-        if file.endswith('.xlsx'):
-            # Load the Excel file
-            file_path = os.path.join("extracted_data", file)
-            data = pd.read_excel(file_path)
+# Streamlit UI
+st.title("Upload a Zip or Excel File")
 
-            # Process the Excel file (e.g., sorting, filtering top outliers)
-            # Replace these columns with actual calculations as needed
-            top_10_positive = data.nlargest(10, 'NAV Per Share Impact')
-            top_10_negative = data.nsmallest(10, 'NAV Per Share Impact')
-
-            # Display the results in Streamlit
-            st.subheader("Top 10 Positive Outliers")
-            st.write(top_10_positive)
-
-            st.subheader("Top 10 Negative Outliers")
-            st.write(top_10_negative)
-
-# Upload ZIP file using Streamlit's native file uploader
-uploaded_file = st.file_uploader("Choose a ZIP file", type="zip")
+uploaded_file = st.file_uploader("Upload a .zip or .xlsx file", type=["zip", "xlsx"])
 
 if uploaded_file:
-    st.write("Processing the uploaded file...")
-    process_uploaded_zip(uploaded_file)
-else:
-    st.write("Please upload a ZIP file to proceed.")
-
+    file_details = {"filename": uploaded_file.name, "filetype": uploaded_file.type}
+    
+    if uploaded_file.name.endswith('.xlsx'):
+        st.write("Processing Excel file...")
+        try:
+            df = process_xlsx(uploaded_file)
+            st.write("File processed successfully!")
+            st.dataframe(df.head())  # Display the first few rows of the DataFrame
+        except Exception as e:
+            st.error(f"Error processing Excel file: {e}")
+    
+    elif uploaded_file.name.endswith('.zip'):
+        st.write("Processing Zip file...")
+        try:
+            df = process_zip(uploaded_file)
+            if df is not None:
+                st.write("File processed successfully!")
+                st.dataframe(df.head())  # Display the first few rows of the DataFrame
+            else:
+                st.error("No valid Excel file found in the ZIP archive.")
+        except Exception as e:
+            st.error(f"Error processing Zip file: {e}")
+    
+    else:
+        st.error("Unsupported file type. Please upload a .zip or .xlsx file.")

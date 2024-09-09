@@ -4,7 +4,7 @@ import os
 from datetime import datetime
 
 # Define the path to the directory containing the files
-directory_path = 'G:/Fixed Income/Municipals/JL/perf'
+directory_path = 'C:/Users/joseph.lapsley/Perf/static/'
 
 # Function to find the latest file in the directory
 def get_latest_file(directory_path):

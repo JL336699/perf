@@ -1,87 +1,76 @@
-# -*- coding: utf-8 -*-
-"""
-Created on Fri Sep  6 14:55:52 2024
-
-@author: Joseph.Lapsley
-"""
-
+import streamlit as st
 import pandas as pd
 import os
 
-# Define the directory containing the files
+# Define the path to the directory
 directory_path = 'G:/Fixed Income/Municipals/JL/perf'
 
-# List all files in the directory
-files = os.listdir(directory_path)
-print(f"Files in directory: {files}")
+def load_latest_file(directory):
+    # List all files in the directory
+    files = os.listdir(directory)
+    xlsx_files = [f for f in files if f.endswith('.xlsx')]
+    
+    if not xlsx_files:
+        st.error("No .xlsx files found in the directory.")
+        return None
+    
+    # Sort files by creation time or name
+    latest_file = sorted(xlsx_files, key=lambda x: os.path.getmtime(os.path.join(directory, x)), reverse=True)[0]
+    return os.path.join(directory, latest_file)
 
-# Filter for Excel files
-xlsx_files = [f for f in files if f.lower().endswith('.xlsx')]
-print(f".xlsx files found: {xlsx_files}")
+def analyze_data(file_path):
+    try:
+        # Load the data from the Excel file
+        data = pd.read_excel(file_path)
+        
+        # Ensure the necessary columns are present
+        required_columns = [
+            'Price Date', 'Fund', 'CUSIP Number', 'Security Description',
+            'Base Price Percent Change', 'Base Market Value Change'
+        ]
+        missing_columns = [col for col in required_columns if col not in data.columns]
+        if missing_columns:
+            st.error(f"Missing columns in the data: {', '.join(missing_columns)}")
+            return
+        
+        # Convert columns to numeric if necessary
+        data['Base Price Percent Change'] = pd.to_numeric(data['Base Price Percent Change'], errors='coerce')
+        data['Base Market Value Change'] = pd.to_numeric(data['Base Market Value Change'], errors='coerce')
 
-# Check if there are any .xlsx files
-if not xlsx_files:
-    raise FileNotFoundError("No .xlsx files found in the directory.")
+        # Drop rows with NaN values in the relevant columns
+        data.dropna(subset=['Base Price Percent Change', 'Base Market Value Change'], inplace=True)
 
-# Find the latest file based on creation/modification time
-latest_file = max(xlsx_files, key=lambda f: os.path.getmtime(os.path.join(directory_path, f)))
-latest_file_path = os.path.join(directory_path, latest_file)
+        # Find the top 10 biggest positive and negative price changes
+        top_10_positive_changes = data.sort_values(by='Base Price Percent Change', ascending=False).head(10)
+        top_10_negative_changes = data.sort_values(by='Base Price Percent Change', ascending=True).head(10)
 
-print(f"Processing latest file: {latest_file_path}")
+        # Find the top 10 biggest positive and negative market value changes
+        top_10_positive_market_value_changes = data.sort_values(by='Base Market Value Change', ascending=False).head(10)
+        top_10_negative_market_value_changes = data.sort_values(by='Base Market Value Change', ascending=True).head(10)
 
-# Load the data from the latest Excel file
-try:
-    data = pd.read_excel(latest_file_path)
-except Exception as e:
-    print(f"Error loading file: {e}")
-    exit()
+        # Display results in Streamlit
+        st.write("### Top 10 Biggest Positive Price Changes")
+        st.write(top_10_positive_changes[['Fund', 'CUSIP Number', 'Security Description', 'Base Price Percent Change']])
 
-# Display the first few rows to understand the structure of the data
-print("Sample data:")
-print(data.head())
+        st.write("### Top 10 Biggest Negative Price Changes")
+        st.write(top_10_negative_changes[['Fund', 'CUSIP Number', 'Security Description', 'Base Price Percent Change']])
 
-# Display the columns to verify data loading
-print("\nColumns in the data:", data.columns.tolist())
+        st.write("### Top 10 Biggest Positive Market Value Changes")
+        st.write(top_10_positive_market_value_changes[['Fund', 'CUSIP Number', 'Security Description', 'Base Market Value Change']])
 
-# Ensure the necessary columns are present
-required_columns = [
-    'Price Date', 'Fund', 'CUSIP Number', 'Security Description',
-    'Base Price Percent Change', 'Base Market Value Change'
-]
+        st.write("### Top 10 Biggest Negative Market Value Changes")
+        st.write(top_10_negative_market_value_changes[['Fund', 'CUSIP Number', 'Security Description', 'Base Market Value Change']])
 
-# Check if the required columns are present
-missing_columns = [col for col in required_columns if col not in data.columns]
-if missing_columns:
-    raise ValueError(f"Missing columns in the data: {', '.join(missing_columns)}")
+    except Exception as e:
+        st.error(f"Error loading file: {e}")
 
-# Convert columns to numeric if necessary
-data['Base Price Percent Change'] = pd.to_numeric(data['Base Price Percent Change'], errors='coerce')
-data['Base Market Value Change'] = pd.to_numeric(data['Base Market Value Change'], errors='coerce')
+def main():
+    st.title("Muni Performance Analysis")
 
-# Drop rows with NaN values in the relevant columns
-data.dropna(subset=['Base Price Percent Change', 'Base Market Value Change'], inplace=True)
+    file_path = load_latest_file(directory_path)
+    if file_path:
+        st.write(f"Processing latest file: {file_path}")
+        analyze_data(file_path)
 
-# Display some statistics for debugging
-print("\nData statistics:")
-print(data.describe())
-
-# Find the top 10 biggest positive and negative price changes
-top_10_positive_changes = data.sort_values(by='Base Price Percent Change', ascending=False).head(10)
-top_10_negative_changes = data.sort_values(by='Base Price Percent Change', ascending=True).head(10)
-
-# Find the top 10 biggest positive and negative market value changes
-top_10_positive_market_value_changes = data.sort_values(by='Base Market Value Change', ascending=False).head(10)
-top_10_negative_market_value_changes = data.sort_values(by='Base Market Value Change', ascending=True).head(10)
-
-# Print the results
-print("\nTop 10 Biggest Positive Price Changes:")
-print(top_10_positive_changes[['Fund', 'CUSIP Number', 'Security Description', 'Base Price Percent Change']].to_string(index=False))
-
-print("\nTop 10 Biggest Negative Price Changes:")
-print(top_10_negative_changes[['Fund', 'CUSIP Number', 'Security Description', 'Base Price Percent Change']].to_string(index=False))
-
-print("\nTop 10 Biggest Positive Market Value Changes:")
-print(top_10_positive_market_value_changes[['Fund', 'CUSIP Number', 'Security Description', 'Base Market Value Change']].to_string(index=False))
-
-print("\nTop 10 Biggest Negative Market Value Changes:")
-print(top_10_negative_market_value_changes[['Fund', 'CUSIP Number', 'Security Description', 'Base Market Value Change']].to_string(index=False))
+if __name__ == "__main__":
+    main()
